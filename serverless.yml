@@ -1,0 +1,209 @@
+service: guarddutysignup
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  tableName: foo
+  memberRoleName: CrossAccountManageGuardDutyRole #The name of the role that will be assumed in member accounts
+
+provider:
+  name: aws
+  runtime: python3.6
+  stage: dev #default stage
+  environment:
+    env: ${self:custom.stage}
+    tableName: ${self:custom.tableName}
+    memberRoleName: ${self:custom.memberRoleName}
+    MasterId:
+      Ref: AWS::AccountId
+  region: us-east-1
+  apiKeys:
+    - mykey6
+  usagePlan:
+    - mykey6:
+        quota:
+          limit: 5000
+          offset: 2
+          period: MONTH
+        throttle:
+          burstLimit: 200
+          rateLimit: 100
+
+functions:
+  # Defines an HTTP API endpoint that calls the main function in create.js
+  # - path: url path is /notes
+  # - method: POST request
+  # - cors: enabled CORS (Cross-Origin Resource Sharing) for browser cross
+  #     domain api call
+  # - authorizer: authenticate using the AWS IAM role
+
+  parsefailure:
+    handler: ParseFailure.lambda_handler
+    role: ManageGuardDutyRole
+    timeout: 60
+    memorySize: 128
+  accessstatus:
+    handler: AccessStatus.lambda_handler
+    role: ManageGuardDutyRole
+    timeout: 60
+    memorySize: 128
+  addmemberaccount:
+    handler: AddMemberAccount.lambda_handler
+    role: ManageGuardDutyRole
+    timeout: 60
+    memorySize: 128
+  invitememberaccount:
+    handler: InviteMemberAccount.lambda_handler
+    role: ManageGuardDutyRole
+    timeout: 60
+    memorySize: 128
+  enableguarddutyonmember:
+    handler: EnableGuardDutyOnMember.lambda_handler
+    role: ManageGuardDutyRole
+    timeout: 60
+    memorySize: 128
+  acceptinviteonmember:
+    handler: AcceptInviteOnMember.lambda_handler
+    role: ManageGuardDutyRole
+    timeout: 60
+    memorySize: 128
+
+stepFunctions:
+  stateMachines:
+    guarddutysignup:
+      name: ${self:service}-${opt:stage}
+      events:
+        - http:
+            path: /guarddutysignup/MasterDetectorId/{MasterDetectorId}/MemberId/{MemberId}/Email/{Email}
+            method: get
+            private: true
+            request:
+              template:
+                application/json: |
+                  {
+                    "input": "{\"MasterDetectorId\": \"$input.params('MasterDetectorId')\", \"MemberId\": \"$input.params('MemberId')\", \"Email\": \"$input.params('Email')\"}",
+                    "stateMachineArn":"arn:aws:states:#{AWS::Region}:#{AWS::AccountId}:stateMachine:${self:service}-${opt:stage}"
+                  }
+              parameters:
+                paths:
+                  MasterDetectorId: true
+                  MemberId: true
+                  Email: true
+            # cors:
+            #   origin: "*"
+            #   maxAge: 86400
+            #   headers:
+            #     - Content-Type
+            #     - X-Amz-Date
+            #     - Authorization
+            #     - X-Api-Key
+            #     - X-Amz-Security-Token
+            #     - X-Amz-User-Agent
+            #     - Access-Control-Allow-Origin
+            # # integration: lambda-proxy
+      definition:
+        Comment: "A Hello World example of the Amazon States Language using an AWS Lambda Function"
+        StartAt: AccessStatus
+        States:
+          AccessStatus:
+            Type: Task
+            Comment: This is a comment about AccessStatus
+            Resource:
+              Fn::GetAtt: [accessstatus, Arn]
+            Next: Can the Role in the Target Account be assumed?
+          Can the Role in the Target Account be assumed?:
+            Type: Choice
+            Choices:
+              - Variable: "$.Status"
+                StringEquals: failure
+                Next: ParseFailure
+            Default: AddMemberAccount
+          AddMemberAccount:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [addmemberaccount, Arn]
+            Next: Was member account successfully added?
+          Was member account successfully added?:
+            Type: Choice
+            Choices:
+              - Variable: "$.Status"
+                StringEquals: failure
+                Next: ParseFailure
+            Default: InviteMemberAccount
+          InviteMemberAccount:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [invitememberaccount, Arn]
+            Next: Was the member account successfully invited replace with actual?
+          Was the member account successfully invited replace with actual?:
+            Type: Choice
+            Choices:
+              - Variable: "$.Status"
+                StringEquals: failure
+                Next: ParseFailure
+            Default: EnableGuardDutyOnMember
+          EnableGuardDutyOnMember:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [enableguarddutyonmember, Arn]
+            Next: Was guard duty successfully enabled or already enabled on member?
+          Was guard duty successfully enabled or already enabled on member?:
+            Type: Choice
+            Choices:
+              - Variable: "$.Status"
+                StringEquals: failure
+                Next: ParseFailure
+            Default: AcceptInviteOnMember
+          AcceptInviteOnMember:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [acceptinviteonmember, Arn]
+            Next: Was invite successfully accepted on member?
+          Was invite successfully accepted on member?:
+            Type: Choice
+            Choices:
+              - Variable: "$.Status"
+                StringEquals: failure
+                Next: ParseFailure
+            Default: Final
+          Final:
+            Type: Succeed
+          ParseFailure:
+            Type: Fail
+
+resources:
+  Resources:
+    ManageGuardDutyRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ${self:custom.stage}-${self:service}ManageGuardDutyRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: myPolicyName
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: "arn:aws:logs:*:*:log-group:/aws/lambda/*:*"
+                - Effect: Allow
+                  Action:
+                    - guardduty:CreateMembers
+                    - guardduty:InviteMembers
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - sts:AssumeRole
+                  Resource: "arn:aws:iam::*:role/CrossAccountManageGuardDutyRole" #target account role
+
+plugins:
+  - serverless-step-functions
+  - serverless-pseudo-parameters

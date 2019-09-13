@@ -1,0 +1,10 @@
+{
+  "name": "guarddutysignup",
+  "description": "",
+  "version": "0.1.0",
+  "dependencies": {},
+  "devDependencies": {
+    "serverless-pseudo-parameters": "^2.4.0",
+    "serverless-step-functions": "^2.6.0"
+  }
+}

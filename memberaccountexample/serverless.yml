@@ -1,0 +1,44 @@
+service: memberaccount
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+
+provider:
+  name: aws
+  runtime: python3.6
+  stage: dev #default stage
+  environment:
+    env: ${self:custom.stage}
+  region: us-east-1
+
+resources:
+  Resources:
+    CrossAccountManageGuardDutyRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: CrossAccountManageGuardDutyRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal: { "AWS": "arn:aws:iam::123456789123:root" } #Master Account
+              Action: sts:AssumeRole
+
+        Policies:
+          - PolicyName: myPolicyName
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - guardduty:*
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - support:*
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: "arn:aws:logs:*:*:log-group:/aws/lambda/*:*"
