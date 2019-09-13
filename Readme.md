@@ -6,7 +6,9 @@ Why: AWS Account sprawl is a major issue in many organziations. By joining membe
 
 ## Architecture
 
-SEE DIAGRAM
+![Architecture Diagram](https://i.imgur.com/B9hhq4y.jpg)
+
+![Step Function Diagram](https://i.imgur.com/oZmTIdm.png)
 
 ## Requirements
 
