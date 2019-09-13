@@ -41,8 +41,8 @@ serverless deploy --stage dev
 
 ## Usage
 
-MasterDetectorId - The Guard Duty DetectorId on your Master Account
-MemberId - The AWS account number of the member account
+MasterDetectorId - The Guard Duty DetectorId on your Master Account<br>
+MemberId - The AWS account number of the member account<br>
 Email - The E-mail address associated with the AWS account number of the member account.
 
 ```
